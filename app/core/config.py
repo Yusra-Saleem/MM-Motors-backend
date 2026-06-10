@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,14 +15,26 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(..., validation_alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     refresh_token_expire_days: int = Field(default=30, validation_alias="REFRESH_TOKEN_EXPIRE_DAYS")
     cors_origins: list[str] = Field(
-        default_factory=lambda: [
+        default=[
             "http://localhost:3000",
             "http://127.0.0.1:3000",
             "http://localhost:3001",
-            "http://127.0.0.1:3001",
+            "https://admin-mm-motors.vercel.app",
             "https://mm-motors.vercel.app",
-        ]
+        ],
+        validation_alias="CORS_ORIGINS"
     )
+
+    @validator("cors_origins", pre=True)
+    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        elif isinstance(v, (list, str)):
+            import json
+            if isinstance(v, str):
+                return json.loads(v)
+            return v
+        return ["*"]
     supabase_url: str = Field(..., validation_alias="SUPABASE_URL")
     supabase_service_role_key: str = Field(..., validation_alias="SUPABASE_KEY")
     supabase_storage_bucket: str = Field(default="mm-motors", validation_alias="SUPABASE_STORAGE_BUCKET")
