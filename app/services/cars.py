@@ -173,6 +173,20 @@ def serialize_car_detail(db: Session, car: Car) -> dict:
 
 
 def create_car(db: Session, payload: CarCreate) -> Car:
+    # Check if chassis number already exists (among active cars)
+    if payload.chassis_number:
+        existing_chassis = db.query(Car).filter(
+            Car.chassis_number == payload.chassis_number,
+            Car.deleted_at.is_(None)
+        ).first()
+        if existing_chassis:
+            raise AppError(f"Chassis number '{payload.chassis_number}' is already registered to an active vehicle.", 409)
+
+    # Check ID uniqueness and generate a new format if it already exists or is empty
+    car_id = payload.id
+    if not car_id or db.query(Car).filter(Car.id == car_id).first():
+        car_id = f"CAR-{uuid4().hex[:10].upper()}"
+
     cid_val = payload.cid
     # If not provided, or not 8 digits long, or not numeric, or already exists, generate a unique sequential one
     if not cid_val or len(cid_val) != 8 or not cid_val.isdigit() or db.query(Car).filter(Car.cid == cid_val).first():
@@ -188,7 +202,7 @@ def create_car(db: Session, payload: CarCreate) -> Car:
         cid_val = f"{next_val:08d}"
 
     car = Car(
-        id=payload.id or f"car-{uuid4().hex[:10]}",
+        id=car_id,
         cid=cid_val,
         chassis_number=payload.chassis_number or f"CH-{uuid4().hex[:10].upper()}",
         make=payload.make,
@@ -226,6 +240,17 @@ def update_car(db: Session, car: Car, payload: CarUpdate) -> Car:
     data = payload.model_dump(exclude_unset=True)
     # Ensure CID can never be edited or changed via update
     data.pop("cid", None)
+    
+    # Check chassis number uniqueness if updated
+    new_chassis = data.get("chassis_number")
+    if new_chassis and new_chassis != car.chassis_number:
+        existing_chassis = db.query(Car).filter(
+            Car.chassis_number == new_chassis,
+            Car.deleted_at.is_(None)
+        ).first()
+        if existing_chassis:
+            raise AppError(f"Chassis number '{new_chassis}' is already registered to an active vehicle.", 409)
+
     for field, value in data.items():
         if value is None:
             if field == "chassis_number":
