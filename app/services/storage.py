@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import io
 import json
-import pillow_avif  # noqa: F401
 from pathlib import Path
 from urllib import error, parse, request
 from PIL import Image
@@ -11,6 +10,19 @@ from fastapi import UploadFile
 
 from app.core.config import settings
 from app.core.errors import AppError
+
+# Try to import pillow-avif for AVIF support.
+# On some deployment hosts (e.g., Hugging Face Spaces) the native libavif
+# library may not be available. In that case we gracefully fall back to JPEG.
+_AVIF_SUPPORTED = False
+try:
+    import pillow_avif  # noqa: F401
+    _AVIF_SUPPORTED = True
+except Exception:
+    import logging
+    logging.getLogger(__name__).warning(
+        "pillow-avif-plugin not available – images will be stored as JPEG instead of AVIF."
+    )
 
 
 def _public_storage_url(object_name: str) -> str:
@@ -22,49 +34,53 @@ def _public_storage_url(object_name: str) -> str:
     return f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/{settings.supabase_storage_bucket}/{parse.quote(object_name)}"
 
 
-def _process_image_to_avif(file: UploadFile) -> tuple[bytes, str]:
+def _process_image(file: UploadFile) -> tuple[bytes, str, str]:
     """
-    Converts an image to AVIF format and resizes it if it exceeds max dimensions.
-    Returns (bytes, content_type).
+    Converts an image to AVIF (if supported) or JPEG, resizing if it exceeds max dimensions.
+    Returns (bytes, content_type, file_extension).
     """
     try:
         img = Image.open(file.file)
-        
+
         # Max dimensions for a car showroom image (HD)
         MAX_WIDTH = 1920
         MAX_HEIGHT = 1080
-        
+
         # Maintain aspect ratio
         if img.width > MAX_WIDTH or img.height > MAX_HEIGHT:
             img.thumbnail((MAX_WIDTH, MAX_HEIGHT), Image.Resampling.LANCZOS)
-            
-        # Convert to RGB if necessary (AVIF doesn't support some modes like P)
-        if img.mode in ("RGBA", "P"):
-            img = img.convert("RGBA")
-        else:
-            img = img.convert("RGB")
-            
+
         buffer = io.BytesIO()
-        # Save as AVIF with high quality (speed=6 is a good balance for production)
-        img.save(buffer, format="AVIF", quality=85, speed=6)
-        return buffer.getvalue(), "image/avif"
-    except Exception as e:
-        # Fallback to original bytes if processing fails
+        if _AVIF_SUPPORTED:
+            # Convert to a mode compatible with AVIF
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGBA")
+            else:
+                img = img.convert("RGB")
+            img.save(buffer, format="AVIF", quality=85, speed=6)
+            return buffer.getvalue(), "image/avif", ".avif"
+        else:
+            # Fallback: save as high-quality JPEG
+            img = img.convert("RGB")
+            img.save(buffer, format="JPEG", quality=88, optimize=True)
+            return buffer.getvalue(), "image/jpeg", ".jpg"
+    except Exception:
+        # Last-resort fallback: return original bytes unchanged
         file.file.seek(0)
-        return file.file.read(), file.content_type or "application/octet-stream"
+        return file.file.read(), file.content_type or "application/octet-stream", Path(file.filename or "image.jpg").suffix or ".jpg"
 
 
 def upload_file_to_supabase(file: UploadFile, object_name: str) -> str:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise AppError("Supabase storage is not configured", 503)
 
-    # Automatically convert images to AVIF for optimization
+    # Automatically convert images for optimization (AVIF if supported, else JPEG)
     is_image = file.content_type and file.content_type.startswith("image/")
     if is_image:
-        body, content_type = _process_image_to_avif(file)
-        # Ensure extension is .avif
+        body, content_type, ext = _process_image(file)
+        # Ensure the object name uses the correct extension
         path = Path(object_name)
-        object_name = path.with_suffix(".avif").as_posix()
+        object_name = path.with_suffix(ext).as_posix()
     else:
         body = file.file.read()
         content_type = file.content_type or "application/octet-stream"
