@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import json
 from pathlib import Path
 from urllib import error, parse, request
 from PIL import Image
@@ -11,18 +10,16 @@ from fastapi import UploadFile
 from app.core.config import settings
 from app.core.errors import AppError
 
-# Try to import pillow-avif for AVIF support.
-# On some deployment hosts (e.g., Hugging Face Spaces) the native libavif
-# library may not be available. In that case we gracefully fall back to JPEG.
-_AVIF_SUPPORTED = False
+# pillow-avif-plugin is required for AVIF support.
+# libavif-dev must be installed in the system (see Dockerfile).
 try:
     import pillow_avif  # noqa: F401
-    _AVIF_SUPPORTED = True
-except Exception:
-    import logging
-    logging.getLogger(__name__).warning(
-        "pillow-avif-plugin not available – images will be stored as JPEG instead of AVIF."
-    )
+except Exception as _avif_err:
+    raise RuntimeError(
+        "pillow-avif-plugin could not be loaded. "
+        "Make sure libavif-dev is installed (see Dockerfile). "
+        f"Original error: {_avif_err}"
+    ) from _avif_err
 
 
 def _public_storage_url(object_name: str) -> str:
@@ -34,10 +31,10 @@ def _public_storage_url(object_name: str) -> str:
     return f"{settings.supabase_url.rstrip('/')}/storage/v1/object/public/{settings.supabase_storage_bucket}/{parse.quote(object_name)}"
 
 
-def _process_image(file: UploadFile) -> tuple[bytes, str, str]:
+def _process_image_to_avif(file: UploadFile) -> tuple[bytes, str]:
     """
-    Converts an image to AVIF (if supported) or JPEG, resizing if it exceeds max dimensions.
-    Returns (bytes, content_type, file_extension).
+    Converts an image to AVIF format and resizes it if it exceeds max dimensions.
+    Returns (bytes, content_type).
     """
     try:
         img = Image.open(file.file)
@@ -50,37 +47,29 @@ def _process_image(file: UploadFile) -> tuple[bytes, str, str]:
         if img.width > MAX_WIDTH or img.height > MAX_HEIGHT:
             img.thumbnail((MAX_WIDTH, MAX_HEIGHT), Image.Resampling.LANCZOS)
 
-        buffer = io.BytesIO()
-        if _AVIF_SUPPORTED:
-            # Convert to a mode compatible with AVIF
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGBA")
-            else:
-                img = img.convert("RGB")
-            img.save(buffer, format="AVIF", quality=85, speed=6)
-            return buffer.getvalue(), "image/avif", ".avif"
+        # Convert to a mode compatible with AVIF
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGBA")
         else:
-            # Fallback: save as high-quality JPEG
             img = img.convert("RGB")
-            img.save(buffer, format="JPEG", quality=88, optimize=True)
-            return buffer.getvalue(), "image/jpeg", ".jpg"
-    except Exception:
-        # Last-resort fallback: return original bytes unchanged
-        file.file.seek(0)
-        return file.file.read(), file.content_type or "application/octet-stream", Path(file.filename or "image.jpg").suffix or ".jpg"
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="AVIF", quality=85, speed=6)
+        return buffer.getvalue(), "image/avif"
+    except Exception as exc:
+        raise AppError(f"Image processing failed: {exc}", 422) from exc
 
 
 def upload_file_to_supabase(file: UploadFile, object_name: str) -> str:
     if not settings.supabase_url or not settings.supabase_service_role_key:
         raise AppError("Supabase storage is not configured", 503)
 
-    # Automatically convert images for optimization (AVIF if supported, else JPEG)
+    # Always convert images to AVIF for maximum storage efficiency
     is_image = file.content_type and file.content_type.startswith("image/")
     if is_image:
-        body, content_type, ext = _process_image(file)
-        # Ensure the object name uses the correct extension
-        path = Path(object_name)
-        object_name = path.with_suffix(ext).as_posix()
+        body, content_type = _process_image_to_avif(file)
+        # Force .avif extension
+        object_name = Path(object_name).with_suffix(".avif").as_posix()
     else:
         body = file.file.read()
         content_type = file.content_type or "application/octet-stream"
@@ -97,7 +86,7 @@ def upload_file_to_supabase(file: UploadFile, object_name: str) -> str:
         "Content-Type": content_type,
         "x-upsert": "true",
     }
-    
+
     req = request.Request(upload_url, data=body, headers=headers, method="POST")
 
     try:
