@@ -25,6 +25,12 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGINS"
     )
 
+    @validator("database_url", "jwt_secret_key", "supabase_url", "supabase_service_role_key", pre=True)
+    def strip_whitespace(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip()
+        return v
+
     @validator("cors_origins", pre=True)
     def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
         if isinstance(v, str) and not v.startswith("["):
