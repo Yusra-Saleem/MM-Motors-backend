@@ -15,8 +15,8 @@ router = APIRouter()
 @router.get("", response_model=dict)
 def get_payments(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=500, alias="pageSize"),
-    limit: int | None = Query(default=None, ge=1, le=500),
+    page_size: int = Query(default=20, ge=1, le=100000, alias="pageSize"),
+    limit: int | None = Query(default=None, ge=1, le=100000),
     query: str | None = Query(default=None, alias="search"),
     user_id: str | None = None,
     order_id: str | None = None,
@@ -47,8 +47,8 @@ def get_payments(
 @router.get("/history", response_model=dict)
 def payment_history(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=500, alias="pageSize"),
-    limit: int | None = Query(default=None, ge=1, le=500),
+    page_size: int = Query(default=20, ge=1, le=100000, alias="pageSize"),
+    limit: int | None = Query(default=None, ge=1, le=100000),
     query: str | None = Query(default=None, alias="search"),
     order_id: str | None = None,
     db: Session = Depends(get_db),

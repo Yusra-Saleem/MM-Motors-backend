@@ -15,8 +15,8 @@ router = APIRouter()
 @router.get("", response_model=dict)
 def get_orders(
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=500, alias="pageSize"),
-    limit: int | None = Query(default=None, ge=1, le=500),
+    page_size: int = Query(default=20, ge=1, le=100000, alias="pageSize"),
+    limit: int | None = Query(default=None, ge=1, le=100000),
     query: str | None = Query(default=None, alias="search"),
     user_id: str | None = None,
     car_id: str | None = None,
@@ -65,8 +65,8 @@ def get_order(order_id: str, db: Session = Depends(get_db), current_user: User =
 def get_order_payments(
     order_id: str,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=500, alias="pageSize"),
-    limit: int | None = Query(default=None, ge=1, le=500),
+    page_size: int = Query(default=20, ge=1, le=100000, alias="pageSize"),
+    limit: int | None = Query(default=None, ge=1, le=100000),
     db: Session = Depends(get_db),
     current_user: User = Depends(current_user_dependency),
 ):
