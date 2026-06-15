@@ -8,6 +8,7 @@ from app.models.favorite import Favorite
 from app.models.order import Order, OrderStatus, PaymentStatus
 from app.models.payment import Payment, UserPaymentStatus
 from app.models.user import AccountStatus, User, UserRole
+from app.models.homepage_stat import HomepageStat
 
 
 def _now() -> datetime:
@@ -209,6 +210,19 @@ def seed_database() -> None:
                     engagement_score=data["engagement_score"],
                 )
             )
+
+        # =========================
+        # SEED HOMEPAGE STATS
+        # =========================
+        existing_stats_count = db.query(HomepageStat).count()
+        if existing_stats_count == 0:
+            initial_stats = [
+                HomepageStat(value="500+", label="Total Sales Cars", icon="Car", priority=0),
+                HomepageStat(value="150+", label="Total Available Cars", icon="Users", priority=1),
+                HomepageStat(value="15+", label="Proven Expertise", icon="Award", priority=2),
+                HomepageStat(value="99%", label="Satisfied Customer", icon="Globe", priority=3),
+            ]
+            db.add_all(initial_stats)
 
         # =========================
         # SAVE
