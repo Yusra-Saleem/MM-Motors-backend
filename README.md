@@ -53,3 +53,23 @@ alembic upgrade head
 - `GET /api/v1/orders`
 - `GET /api/v1/users`
 - `GET /api/v1/dashboard/stats`
+
+## Running with Docker Compose
+
+You can spin up the backend application using Docker Compose.
+
+1. Ensure you have the `DATABASE_URL` and other variables set in your [`.env`](file:///e:/clients%20project/backend/.env) file.
+
+2. Build and start the service:
+   ```bash
+   docker compose up --build
+   ```
+
+The application will be accessible at:
+- **FastAPI API (Direct)**: http://localhost:8000
+- **Nginx Proxy**: http://localhost (Port 80)
+
+It will automatically reload when you make changes to the code.
+
+
+

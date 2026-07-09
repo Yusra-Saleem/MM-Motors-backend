@@ -33,6 +33,8 @@ def _car_snapshot(car: dict[str, object]) -> dict[str, object]:
 
 
 def seed_database() -> None:
+    from dotenv import load_dotenv
+    load_dotenv()
     db = SessionLocal()
 
     try:
