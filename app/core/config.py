@@ -1,11 +1,19 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+env_path = BASE_DIR / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(env_path) if env_path.exists() else ".env",
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
     project_name: str = "MM Motors API"
     api_v1_prefix: str = "/api/v1"
@@ -49,7 +57,18 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    try:
+        return Settings()
+    except Exception as e:
+        import sys
+        print("\n" + "="*80, file=sys.stderr)
+        print("CONFIGURATION ERROR: Missing required environment variables or .env file.", file=sys.stderr)
+        print("Please check that your '.env' file contains all required configurations.", file=sys.stderr)
+        print("Required fields: DATABASE_URL, JWT_SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES, SUPABASE_URL, SUPABASE_KEY", file=sys.stderr)
+        print(f"Details: {e}", file=sys.stderr)
+        print("="*80 + "\n", file=sys.stderr)
+        raise e
 
 
 settings = get_settings()
+

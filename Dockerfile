@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# Note: This Dockerfile runs as a non-root user. Because .env is ignored in .dockerignore for security,
+# if running this container directly (outside docker-compose), you must pass the env-file:
+#   docker build -t mmmotors-backend .
+#   docker run -p 8000:8000 --env-file .env mmmotors-backend
+
+
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -31,4 +37,4 @@ COPY --chown=user . $HOME/app
 EXPOSE 7860
 
 # Run migrations and start FastAPI using uvicorn
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
