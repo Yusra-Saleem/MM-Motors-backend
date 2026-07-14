@@ -29,6 +29,9 @@ class Settings(BaseSettings):
             "http://localhost:3001",
             "https://admin-mm-motors.vercel.app",
             "https://mm-motors.vercel.app",
+            "https://admin.mmmotorskarachi.com",
+            "https://mmmotorskarachi.com",
+            "https://www.mmmotorskarachi.com",
         ],
         validation_alias="CORS_ORIGINS"
     )

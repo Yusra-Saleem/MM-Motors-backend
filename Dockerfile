@@ -37,4 +37,4 @@ COPY --chown=user . $HOME/app
 EXPOSE 7860
 
 # Run migrations and start FastAPI using uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "7860"]
