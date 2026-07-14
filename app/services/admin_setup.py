@@ -3,9 +3,18 @@ import sys
 from datetime import UTC, datetime
 from typing import Optional
 from dotenv import load_dotenv
+import logging
+from functools import lru_cache
 
 # Load .env file
 load_dotenv()
+
+# Configure logger for production
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Add the project root to sys.path to allow importing 'app'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -29,20 +38,29 @@ def setup_admin_user():
     admin_name = os.getenv("MM_MOTORS_ADMIN_NAME", "MM Motors Admin")
     
     if not admin_email or not admin_password:
-        print("Error: MM_MOTORS_ADMIN_EMAIL and MM_MOTORS_ADMIN_PASSWORD must be set in .env")
+        logger.error("MM_MOTORS_ADMIN_EMAIL and MM_MOTORS_ADMIN_PASSWORD must be set in .env")
         return
 
-    print(f"--- Admin Setup Process ---")
-    print(f"Target Email: {admin_email}")
+    logger.info("--- Admin Setup Process ---")
+    logger.info(f"Target Email: {admin_email}")
 
     try:
         # 1. Sync with Supabase Auth
         supabase_id = None
         try:
-            # Check if user exists in Supabase
-            # We list users using the admin API
-            users_resp = supabase.auth.admin.list_users()
-            existing_auth_user = next((u for u in users_resp if u.email == admin_email), None)
+            # Check if user exists in Supabase using cached call; fallback if query param not supported
+            @lru_cache(maxsize=1)
+            def get_cached_admin_user(email: str):
+                try:
+                    # Attempt filtered query (may not be supported by the SDK version)
+                    users = supabase.auth.admin.list_users(query={"email": email})
+                except TypeError:
+                    # SDK does not accept 'query', fallback to full list and filter locally
+                    logger.debug("Supabase list_users does not support 'query' argument; using full list fallback.")
+                    users = supabase.auth.admin.list_users()
+                return next((u for u in users if getattr(u, "email", None) == email), None)
+
+            existing_auth_user = get_cached_admin_user(admin_email)
             
             if existing_auth_user:
                 supabase_id = existing_auth_user.id
