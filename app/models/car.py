@@ -12,7 +12,6 @@ class CarStatus(str, Enum):
     available = "available"
     upcoming = "upcoming"
     sold = "sold"
-    pending = "pending"
 
 
 class Car(Base, TimestampMixin):
