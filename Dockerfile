@@ -9,7 +9,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8080
 
 WORKDIR /code
 
@@ -34,10 +34,10 @@ WORKDIR $HOME/app
 COPY --chown=user . $HOME/app
 
 # Expose the default Hugging Face Space port
-EXPOSE 8000
+EXPOSE 8080
 
 # Run migrations and start FastAPI using uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
 
 
 
