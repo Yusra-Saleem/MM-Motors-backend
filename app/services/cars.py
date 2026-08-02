@@ -14,7 +14,7 @@ from app.models.favorite import Favorite
 from app.models.order import Order
 from app.schemas.car import CarCreate, CarUpdate
 from app.services.response_aliases import with_response_aliases
-from app.services.storage import build_object_name, upload_file_to_supabase
+from app.services.storage import build_object_name, upload_file_to_supabase, upload_thumbnail_to_supabase
 
 
 def _normalize_sort(sort_by: str | None, sort_dir: str | None) -> tuple[str, str]:
@@ -288,16 +288,29 @@ def upload_car_images(db: Session, car: Car, files: list[UploadFile]) -> Car:
         raise AppError("No images provided", 400)
 
     uploaded_urls: list[str] = []
+    first_thumb_url: str | None = None
+
     for index, file in enumerate(files, start=1):
         object_name = build_object_name(
             f"cars/{car.id}",
             f"{index:02d}-{uuid4().hex}-{file.filename or 'image'}",
         )
-        uploaded_urls.append(upload_file_to_supabase(file, object_name))
+        main_url = upload_file_to_supabase(file, object_name)
+        uploaded_urls.append(main_url)
+
+        if index == 1:
+            try:
+                thumb_object_name = build_object_name(
+                    f"cars/{car.id}",
+                    f"thumb-{index:02d}-{uuid4().hex}-{file.filename or 'image'}",
+                )
+                first_thumb_url = upload_thumbnail_to_supabase(file, thumb_object_name)
+            except Exception:
+                first_thumb_url = main_url
 
     car.images = list(car.images or []) + uploaded_urls
-    if not car.thumbnail and uploaded_urls:
-        car.thumbnail = uploaded_urls[0]
+    if not car.thumbnail:
+        car.thumbnail = first_thumb_url or (uploaded_urls[0] if uploaded_urls else None)
     db.commit()
     db.refresh(car)
     sync_car_rankings(db, car.id)
