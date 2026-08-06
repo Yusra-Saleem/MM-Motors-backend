@@ -1,6 +1,7 @@
 import time
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy.orm import Session
+
 
 from app.db.session import get_db
 from app.models.car import CarStatus
@@ -53,8 +54,10 @@ def get_cars(
     make: str | None = None,
     package: str | None = None,
     featured: bool | None = None,
+    response: Response = Response(),
     db: Session = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
     effective_page_size = limit or page_size
     cache_key = f"cars:page={page}:limit={effective_page_size}:query={query}:status={status}:year={year}:min_price={min_price}:max_price={max_price}:sort_by={sort_by}:sort_dir={sort_dir}:body_type={body_type}:fuel_type={fuel_type}:drive_type={drive_type}:make={make}:package={package}:featured={featured}"
     cached_res = db_cache.get(cache_key)
@@ -81,8 +84,10 @@ def get_cars(
 @router.get("/featured", response_model=dict)
 def get_featured(
     limit: int = Query(default=8, ge=1, le=24),
+    response: Response = Response(),
     db: Session = Depends(get_db),
 ):
+    response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300, stale-while-revalidate=600"
     cache_key = f"featured:limit={limit}"
     cached_res = db_cache.get(cache_key)
     if cached_res is not None:
